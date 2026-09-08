@@ -1,0 +1,55 @@
+.controles {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid #d5d0e6;
+  border-radius: 8px;
+  background: #ffffff;
+  font-family: system-ui, sans-serif;
+}
+
+.controles h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.controles label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.85rem;
+  color: #333;
+}
+
+.controles input[type='range'] {
+  width: 100%;
+}
+
+.botones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.botones button {
+  flex: 1 1 auto;
+  padding: 8px 12px;
+  border: 1px solid #3b82c4;
+  border-radius: 6px;
+  background: #fff;
+  color: #1c2a4a;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.botones button.activo {
+  background: #3b82c4;
+  color: #fff;
+}
+
+.botones button.reset {
+  border-color: #c4463b;
+  color: #c4463b;
+}

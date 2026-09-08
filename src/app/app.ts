@@ -1,11 +1,12 @@
 import { Component, signal } from '@angular/core';
+import { Figura } from './figura/figura';
 
 @Component({
-  imports: [],
+  imports: [Figura],
   selector: 'app-root',
   styleUrl: './app.css',
   templateUrl: './app.html',
 })
 export class App {
-  protected readonly title = signal('hackathon-transformaciones');
+  protected readonly title = signal('Hackathon: transformaciones con matrices');
 }

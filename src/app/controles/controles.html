@@ -1,1 +1,43 @@
-<p>controles works!</p>
+<div class="controles">
+  <h3>Controles</h3>
+
+  <label>
+    Traslación X: {{ transform.tx() }}
+    <input type="range" min="-250" max="250" step="1" [value]="transform.tx()" (input)="onTx($event)" />
+  </label>
+
+  <label>
+    Traslación Y: {{ transform.ty() }}
+    <input type="range" min="-180" max="180" step="1" [value]="transform.ty()" (input)="onTy($event)" />
+  </label>
+
+  <label>
+    Escala: {{ transform.scale() }}
+    <input type="range" min="0.2" max="2.5" step="0.05" [value]="transform.scale()" (input)="onScale($event)" />
+  </label>
+
+  <label>
+    Rotación Z (en el plano): {{ transform.rotationZDeg() }}°
+    <input type="range" min="0" max="360" step="1" [value]="transform.rotationZDeg()" (input)="onRotationZ($event)" />
+  </label>
+
+  <label>
+    Rotación 3D eje Y (izquierda/derecha): {{ transform.rotationYDeg() }}°
+    <input type="range" min="0" max="360" step="1" [value]="transform.rotationYDeg()" (input)="onRotationY($event)" />
+  </label>
+
+  <label>
+    Rotación 3D eje X (arriba/abajo): {{ transform.rotationXDeg() }}°
+    <input type="range" min="0" max="360" step="1" [value]="transform.rotationXDeg()" (input)="onRotationX($event)" />
+  </label>
+
+  <div class="botones">
+    <button type="button" [class.activo]="transform.flipH()" (click)="toggleFlipH()">
+      Reflejar horizontal
+    </button>
+    <button type="button" [class.activo]="transform.flipV()" (click)="toggleFlipV()">
+      Reflejar vertical
+    </button>
+    <button type="button" class="reset" (click)="reset()">Reset</button>
+  </div>
+</div>
