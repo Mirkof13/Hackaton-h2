@@ -28,20 +28,26 @@ export class Figura implements AfterViewInit, OnDestroy {
   private textShape?: Konva.Shape;
   private resizeObserver?: ResizeObserver;
 
-  // --- dimensiones del borrador (unidades arbitrarias) ---
+  // --- dimensiones del borrador ---
   private readonly L = 3.4;
   private readonly W = 1.0;
   private readonly H = 0.85;
-  private readonly bevelW = 0.22;
-  private readonly bevelH = 0.22;
+  private readonly bevelW = 0.09;   // franja crema: ancho
+  private readonly bevelH = 0.08;   // franja crema: alto
+  private readonly tipCut = 0.55;   // largo de la zona cónica en cada punta
+  private readonly tipShrink = 0.66; // cuánto se achica el perfil en la punta
   private readonly split = 0.56 * this.L; // frontera rojo/azul
 
+  private flatHalf = 0;       // mitad de largo de la sección recta (sin puntas)
+  private topHalfDepth = 0;
   private faces: Face3D[] = [];
-  private topCorners!: { p0: vec3; p1: vec3; p2: vec3 };
+  private topEdgeLeft!: vec3;
+  private topEdgeRight!: vec3;
+  private topCenter!: vec3;
 
-  // --- cámara orbital (esférica alrededor del objeto) ---
-  private theta = 0.55;
-  private phi = 0.48;
+  // --- cámara orbital ---
+  private theta = 0.42;
+  private phi = 0.34;
   private radius = 9.5;
   private readonly target = vec3.fromValues(0, 0, this.H * 0.55);
   private readonly up = vec3.fromValues(0, 0, 1);
@@ -50,7 +56,7 @@ export class Figura implements AfterViewInit, OnDestroy {
   private dragging = false;
   private lastX = 0;
   private lastY = 0;
-  private textTransform = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
+  private textTransform = { x: 0, y: 0, angle: 0, scale: 1 };
 
   ngAfterViewInit(): void {
     this.buildGeometry();
@@ -64,12 +70,14 @@ export class Figura implements AfterViewInit, OnDestroy {
   }
 
   // ------------------------------------------------------------------
-  // Geometría 3D (vértices + normales + iluminación precalculada)
+  // Geometría 3D
   // ------------------------------------------------------------------
   private buildGeometry(): void {
-    const { L, W, H, bevelW, bevelH, split } = this;
+    const { L, W, H, bevelW, bevelH, split, tipCut, tipShrink } = this;
     const v = (x: number, y: number, z: number) => vec3.fromValues(x, y, z);
     const interior = v(0, 0, H * 0.4);
+    const flatHalf = L - tipCut;
+    this.flatHalf = flatHalf;
 
     const red = '#d8261f';
     const blue = '#1a63c9';
@@ -79,6 +87,7 @@ export class Figura implements AfterViewInit, OnDestroy {
     const yFront = -W;
     const yBevelBack = -W + bevelW;
     const zBevelTop = H - bevelH;
+    this.topHalfDepth = (W - yBevelBack) / 2;
 
     const face = (pts: vec3[], color: string): Face3D => {
       const e1 = vec3.subtract(vec3.create(), pts[1], pts[0]);
@@ -97,38 +106,55 @@ export class Figura implements AfterViewInit, OnDestroy {
       return { points: ordered, color, normal, centroid, shade: 0.42 + 0.58 * lambert, isTop };
     };
 
+    // ---- sección recta central ----
     const longFace = (y: number, z0: number, z1: number, cA: string, cB: string): Face3D[] => [
-      face([v(-L, y, z0), v(split, y, z0), v(split, y, z1), v(-L, y, z1)], cA),
-      face([v(split, y, z0), v(L, y, z0), v(L, y, z1), v(split, y, z1)], cB),
+      face([v(-flatHalf, y, z0), v(split, y, z0), v(split, y, z1), v(-flatHalf, y, z1)], cA),
+      face([v(split, y, z0), v(flatHalf, y, z0), v(flatHalf, y, z1), v(split, y, z1)], cB),
     ];
 
-    // cara frontal (debajo del bisel)
     this.faces.push(...longFace(yFront, 0, zBevelTop, red, blue));
-    // bisel (franja crema, sin dividir)
     this.faces.push(face([
-      v(-L, yFront, zBevelTop), v(L, yFront, zBevelTop),
-      v(L, yBevelBack, H), v(-L, yBevelBack, H),
+      v(-flatHalf, yFront, zBevelTop), v(flatHalf, yFront, zBevelTop),
+      v(flatHalf, yBevelBack, H), v(-flatHalf, yBevelBack, H),
     ], cream));
-    // cara superior
-    this.faces.push(face([v(-L, yBevelBack, H), v(split, yBevelBack, H), v(split, W, H), v(-L, W, H)], red));
-    this.faces.push(face([v(split, yBevelBack, H), v(L, yBevelBack, H), v(L, W, H), v(split, W, H)], blue));
-    // cara trasera (sin bisel)
+    this.faces.push(face([v(-flatHalf, yBevelBack, H), v(split, yBevelBack, H), v(split, W, H), v(-flatHalf, W, H)], red));
+    this.faces.push(face([v(split, yBevelBack, H), v(flatHalf, yBevelBack, H), v(flatHalf, W, H), v(split, W, H)], blue));
     this.faces.push(...longFace(W, 0, H, red, blue));
-    // base
-    this.faces.push(face([v(-L, yFront, 0), v(L, yFront, 0), v(L, W, 0), v(-L, W, 0)], sole));
-    // tapas de los extremos (perfil con bisel)
-    this.faces.push(face([
-      v(-L, yFront, 0), v(-L, yFront, zBevelTop), v(-L, yBevelBack, H), v(-L, W, H), v(-L, W, 0),
-    ], red));
-    this.faces.push(face([
-      v(L, yFront, 0), v(L, W, 0), v(L, W, H), v(L, yBevelBack, H), v(L, yFront, zBevelTop),
-    ], blue));
+    this.faces.push(face([v(-flatHalf, yFront, 0), v(flatHalf, yFront, 0), v(flatHalf, W, 0), v(-flatHalf, W, 0)], sole));
 
-    this.topCorners = {
-      p0: v(-L, yBevelBack, H),
-      p1: v(L, yBevelBack, H),
-      p2: v(-L, W, H),
+    // ---- puntas cónicas ----
+    const cross = (x: number, s: number) => ({
+      fb: v(x, -W * s, 0),
+      ft: v(x, -W * s, (H - bevelH) * s),
+      tf: v(x, (-W + bevelW) * s, H * s),
+      tb: v(x, W * s, H * s),
+      bb: v(x, W * s, 0),
+    });
+
+    const strip = (xA: number, xB: number, sB: number, color: string): Face3D[] => {
+      const A = cross(xA, 1);
+      const B = cross(xB, sB);
+      return [
+        face([A.fb, B.fb, B.ft, A.ft], color),
+        face([A.ft, B.ft, B.tf, A.tf], cream),
+        face([A.tf, B.tf, B.tb, A.tb], color),
+        face([A.tb, B.tb, B.bb, A.bb], color),
+        face([A.bb, B.bb, B.fb, A.fb], sole),
+      ];
     };
+    const capAt = (x: number, s: number, color: string): Face3D => {
+      const c = cross(x, s);
+      return face([c.fb, c.ft, c.tf, c.tb, c.bb], color);
+    };
+
+    this.faces.push(...strip(-flatHalf, -L, tipShrink, red));
+    this.faces.push(capAt(-L, tipShrink, red));
+    this.faces.push(...strip(flatHalf, L, tipShrink, blue));
+    this.faces.push(capAt(L, tipShrink, blue));
+
+    this.topEdgeLeft = v(-flatHalf, yBevelBack, H);
+    this.topEdgeRight = v(flatHalf, yBevelBack, H);
+    this.topCenter = v(0, (yBevelBack + W) / 2, H);
   }
 
   // ------------------------------------------------------------------
@@ -152,11 +178,7 @@ export class Figura implements AfterViewInit, OnDestroy {
     this.layer.add(this.groundShadow);
 
     for (const f of this.faces) {
-      f.node = new Konva.Line({
-        closed: true,
-        strokeWidth: 1,
-        stroke: 'rgba(20, 10, 8, 0.18)',
-      });
+      f.node = new Konva.Line({ closed: true, strokeWidth: 1, stroke: 'rgba(20, 10, 8, 0.18)' });
       this.layer.add(f.node);
     }
 
@@ -165,7 +187,9 @@ export class Figura implements AfterViewInit, OnDestroy {
         const native = (ctx as unknown as { _context: CanvasRenderingContext2D })._context;
         native.save();
         const t = this.textTransform;
-        native.transform(t.a, t.b, t.c, t.d, t.e, t.f);
+        native.translate(t.x, t.y);
+        native.rotate(t.angle);
+        native.scale(t.scale, t.scale);
         this.drawTopArtwork(native);
         native.restore();
       },
@@ -189,15 +213,11 @@ export class Figura implements AfterViewInit, OnDestroy {
     });
     this.stage.on('pointerup pointerleave pointercancel', () => (this.dragging = false));
 
-    container.addEventListener(
-      'wheel',
-      (e) => {
-        e.preventDefault();
-        this.radius = Math.min(15, Math.max(5.5, this.radius + e.deltaY * 0.01));
-        this.render();
-      },
-      { passive: false },
-    );
+    container.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      this.radius = Math.min(15, Math.max(5.5, this.radius + e.deltaY * 0.01));
+      this.render();
+    }, { passive: false });
 
     this.resizeObserver = new ResizeObserver(() => {
       const w = Math.min(container.clientWidth || 900, 1000);
@@ -210,7 +230,7 @@ export class Figura implements AfterViewInit, OnDestroy {
   }
 
   // ------------------------------------------------------------------
-  // Pipeline de render: modelo -> vista -> proyección -> pantalla
+  // Render: modelo -> vista -> proyección -> pantalla
   // ------------------------------------------------------------------
   private render(): void {
     if (!this.stage) return;
@@ -229,14 +249,14 @@ export class Figura implements AfterViewInit, OnDestroy {
 
     const project = (p: vec3) => {
       const out = vec3.create();
-      vec3.transformMat4(out, p, vp); // gl-matrix ya hace la división de perspectiva
+      vec3.transformMat4(out, p, vp);
       return { x: (out[0] * 0.5 + 0.5) * width, y: (1 - (out[1] * 0.5 + 0.5)) * height };
     };
 
     let topVisible = false;
     for (const f of this.faces) {
       const toEye = vec3.normalize(vec3.create(), vec3.subtract(vec3.create(), eye, f.centroid));
-      const visible = vec3.dot(f.normal, toEye) > 0.02; // back-face culling (objeto convexo)
+      const visible = vec3.dot(f.normal, toEye) > 0.02;
       f.node!.visible(visible);
       if (!visible) continue;
       if (f.isTop) topVisible = true;
@@ -250,18 +270,15 @@ export class Figura implements AfterViewInit, OnDestroy {
       f.node!.fill(this.shadeColor(f.color, f.shade));
     }
 
-    const { p0, p1, p2 } = this.topCorners;
-    const s0 = project(p0), s1 = project(p1), s2 = project(p2);
-    const dx = p1[0] - p0[0];
-    const dy = p2[1] - p0[1];
-    const a = (s1.x - s0.x) / dx;
-    const b = (s1.y - s0.y) / dx;
-    const c = (s2.x - s0.x) / dy;
-    const d = (s2.y - s0.y) / dy;
+    // transformación RÍGIDA (sin shear) para el texto: sigue posición/rotación/escala, no se deforma
+    const sLeft = project(this.topEdgeLeft);
+    const sRight = project(this.topEdgeRight);
+    const sCenter = project(this.topCenter);
     this.textTransform = {
-      a, b, c, d,
-      e: s0.x - a * p0[0] - c * p0[1],
-      f: s0.y - b * p0[0] - d * p0[1],
+      x: sCenter.x,
+      y: sCenter.y,
+      angle: Math.atan2(sRight.y - sLeft.y, sRight.x - sLeft.x),
+      scale: Math.hypot(sRight.x - sLeft.x, sRight.y - sLeft.y) / (2 * this.flatHalf),
     };
     this.textShape?.visible(topVisible);
 
@@ -269,28 +286,27 @@ export class Figura implements AfterViewInit, OnDestroy {
   }
 
   private drawTopArtwork(ctx: CanvasRenderingContext2D): void {
-    const { L, W, bevelW, split } = this;
-    const midY = (-W + bevelW + W) / 2;
+    const half = this.flatHalf;
 
     ctx.fillStyle = '#241413';
     ctx.textBaseline = 'middle';
     ctx.font = 'italic 700 0.62px Georgia, serif';
     ctx.save();
-    ctx.translate(-L * 0.32, midY - 0.28);
+    ctx.translate(-half * 0.32, -0.28);
     ctx.rotate(-0.03);
     ctx.fillText('Pelikan', 0, 0);
     ctx.restore();
 
     ctx.font = '700 0.5px Arial, sans-serif';
     ctx.save();
-    ctx.translate(-L * 0.05, midY + 0.32);
+    ctx.translate(-half * 0.05, 0.32);
     ctx.rotate(-0.02);
     ctx.fillText('B R  4 0', 0, 0);
     ctx.restore();
 
     const icon = (cx: number, color: string) => {
       ctx.save();
-      ctx.translate(cx, midY);
+      ctx.translate(cx, 0);
       ctx.rotate(-0.12);
       ctx.strokeStyle = color;
       ctx.lineWidth = 0.045;
@@ -305,8 +321,8 @@ export class Figura implements AfterViewInit, OnDestroy {
       ctx.stroke();
       ctx.restore();
     };
-    icon(-L * 0.78, '#241413');
-    icon(split + 0.42, '#0d2748');
+    icon(-half * 0.78, '#241413');
+    icon(this.split + 0.42, '#0d2748');
   }
 
   private shadeColor(hex: string, factor: number): string {
