@@ -1,3 +1,11 @@
+/**
+ * MÓDULO: Modelo 3D y Renderizado Geométrico
+ * AUTOR: Yuri Jesús
+ * DESCRIPCIÓN: Definición de la geometría 3D de la goma Pelikan BR40 (bloques rojo,
+ * crema y azul), cálculo de caras quads, sistema de cámara con proyección en
+ * perspectiva (gl-matrix) y renderizado sobre lienzo Konva con ordenamiento de profundidad.
+ */
+
 import { Component, computed, inject } from '@angular/core';
 import { mat4, vec3 } from 'gl-matrix';
 import type { Context } from 'konva/lib/Context';
