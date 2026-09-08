@@ -1,59 +1,48 @@
-# HackathonTransformaciones
+# Hackathon Transformaciones 3D - Computación Gráfica
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 22.1.7.
+Proyecto interactivo desarrollado en **Angular**, **Konva (ng2-konva)** y **gl-matrix** para la simulación y manipulación en tiempo real de un modelo geométrico 3D (goma Pelikan BR40) mediante matrices de transformación y proyección en perspectiva.
 
-## Development server
+---
 
-To start a local development server, run:
+## 👥 Módulos y Autores
+
+### 1. Modelo 3D y Renderizado Geométrico
+- **Autor / Responsable**: **Yuri Jesús**
+- **Componente**: `FiguraComponent` (`src/app/figura/`)
+- **Descripción detallada**:
+  - Modelado geométrico tridimensional de la goma Pelikan BR40 compuesto por bloques poligonales (secciones roja, crema y azul).
+  - Definición de topología de vértices 3D y generación de caras quads.
+  - Implementación de cámara sintética con matriz de vista (`lookAt`) y matriz de proyección en perspectiva (`perspective`) utilizando `gl-matrix`.
+  - Algoritmo de proyección a coordenadas de pantalla (NDC a Canvas 2D) y ordenamiento de profundidad de caras (*Painter's Algorithm*) para correcta oclusión visual en el lienzo Konva.
+
+### 2. Movimientos, Transformaciones Afines y Controles
+- **Autor / Responsable**: **Mirkof Guzmán**
+- **Componentes**: `TransformService` (`src/app/transform.service.ts`) y `ControlesComponent` (`src/app/controles/`)
+- **Descripción detallada**:
+  - Sistema de señales reactivas (Angular Signals) para el estado de transformaciones en tiempo real.
+  - Construcción y composición matemática de matrices afines $4\times 4$:
+    - **Traslación**: Desplazamiento dinámico en los ejes $X$, $Y$ y $Z$.
+    - **Rotación 3D**: Rotación en ángulos de Euler independientes sobre los ejes $X$, $Y$ y $Z$.
+    - **Escalado**: Escala uniforme y factores de deformación.
+    - **Reflexión (Flip)**: Inversión en sentido horizontal y vertical.
+  - Interfaz gráfica interactiva de controles con sliders, toggles y función de reseteo a coordenadas base.
+
+---
+
+## 🚀 Ejecución en Desarrollo
+
+Para iniciar el servidor local de desarrollo:
 
 ```bash
 ng serve
 ```
 
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
+Navega a `http://localhost:4200/` en tu navegador.
 
-## Code scaffolding
+## 📦 Compilación
 
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
-
-```bash
-ng generate component component-name
-```
-
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
-
-```bash
-ng generate --help
-```
-
-## Building
-
-To build the project run:
+Para compilar el proyecto en producción:
 
 ```bash
 ng build
 ```
-
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
-
-## Running unit tests
-
-To execute unit tests with the [Vitest](https://vitest.dev/) test runner, use the following command:
-
-```bash
-ng test
-```
-
-## Running end-to-end tests
-
-For end-to-end (e2e) testing, run:
-
-```bash
-ng e2e
-```
-
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
-
-## Additional Resources
-
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
