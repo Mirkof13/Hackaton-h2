@@ -1,3 +1,11 @@
+/**
+ * MÓDULO: Movimientos y Transformaciones Afines 3D
+ * AUTOR: Mirkof Guzmán
+ * DESCRIPCIÓN: Servicio de cálculo de matrices de modelo 4x4 mediante gl-matrix.
+ * Administra las transformaciones reactivas de traslación (X, Y), rotación 3D (Euler X, Y, Z),
+ * escalado y reflexiones (flipH, flipV).
+ */
+
 import { Injectable, computed, signal } from '@angular/core';
 import { mat4 } from 'gl-matrix';
 

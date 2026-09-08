@@ -1,3 +1,10 @@
+/**
+ * MÓDULO: Panel Interactivo de Controles de Movimiento y Transformación
+ * AUTOR: Mirkof Guzmán
+ * DESCRIPCIÓN: Componente interactivo para manipular en tiempo real traslaciones,
+ * rotaciones en 3 ejes, escalado, reflexiones y reseteo del modelo 3D.
+ */
+
 import { Component, inject } from '@angular/core';
 import { TransformService } from '../transform.service';
 
