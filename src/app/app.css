@@ -1,11 +1,69 @@
-main {
-  max-width: 1000px;
-  margin: 0 auto;
-  padding: 16px;
-  font-family: system-ui, sans-serif;
+.app-container {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #f1f5f9;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  color: #0f172a;
 }
 
-h1 {
-  font-size: 1.4rem;
-  color: #1c2a4a;
+.app-header {
+  background: #ffffff;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 16px 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.header-contenido {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.header-titulo-grupo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.badge-eval {
+  display: inline-flex;
+  width: fit-content;
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  margin-bottom: 2px;
+}
+
+.header-titulo-grupo h1 {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+}
+
+.header-desc {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #475569;
+  line-height: 1.4;
+}
+
+.header-desc code {
+  background: #f1f5f9;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  color: #0369a1;
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+}
+
+.app-main {
+  flex: 1;
+  padding: 20px 24px 32px;
 }

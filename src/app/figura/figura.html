@@ -1,19 +1,112 @@
-<section class="figura">
-  <div class="lienzo">
-    <ko-stage [config]="configStage">
-      <ko-layer>
-        <ko-shape [config]="configEjes"></ko-shape>
-        <ko-shape [config]="configFigura()"></ko-shape>
-      </ko-layer>
-    </ko-stage>
+<section class="figura-layout">
+  <!-- COLUMNA PRINCIPAL: LIENZO 3D -->
+  <div class="columna-lienzo">
+    <div class="lienzo-tarjeta">
+      <div class="lienzo-header">
+        <div class="lienzo-titulo">
+          <span class="punto-live"></span>
+          <span>Visor 3D Interactivo — Goma Pelikan BR 40</span>
+        </div>
+        <div class="lienzo-stats">
+          <span>Proyeccion en Perspectiva</span>
+          <span>Sombreado Lambert / Phong</span>
+        </div>
+      </div>
+
+      <div class="lienzo-canvas">
+        <ko-stage [config]="configStage">
+          <ko-layer>
+            <ko-shape [config]="configEjes()"></ko-shape>
+            <ko-shape [config]="configFigura()"></ko-shape>
+          </ko-layer>
+        </ko-stage>
+      </div>
+
+      <div class="lienzo-footer">
+        <div class="leyenda-item"><span class="chip chip-rojo"></span> Lapiz (Grafito)</div>
+        <div class="leyenda-item"><span class="chip chip-crema"></span> Faja Nucleo</div>
+        <div class="leyenda-item"><span class="chip chip-azul"></span> Tinta (Abrasivo)</div>
+        <div class="leyenda-item"><span class="chip chip-hilos"></span> Aristas / Hilos 3D</div>
+        <div class="leyenda-item"><span class="chip chip-nodos"></span> Vertices 3D</div>
+      </div>
+    </div>
+
+    <!-- TARJETA DE CRÉDITOS DEL EQUIPO -->
+    <div class="equipo-tarjeta">
+      <div class="equipo-header">
+        <h4>Integrantes y Responsabilidades</h4>
+        <span class="badge-tag">Grupo de Trabajo</span>
+      </div>
+      <div class="equipo-grid">
+        <div class="miembro-card">
+          <span class="rol-tag">Modelado 3D</span>
+          <span class="miembro-nombre">Yuri Jesus</span>
+          <span class="miembro-desc">Geometria poligonal, vertices, aristas e hilos</span>
+        </div>
+        <div class="miembro-card">
+          <span class="rol-tag">Movimiento</span>
+          <span class="miembro-nombre">Mirkof Guzman</span>
+          <span class="miembro-desc">Traslacion, rotacion Euler y escalado 3D</span>
+        </div>
+        <div class="miembro-card">
+          <span class="rol-tag">Reflejos</span>
+          <span class="miembro-nombre">Diego Paredes</span>
+          <span class="miembro-desc">Reflejo especular en suelo y matrices de simetria</span>
+        </div>
+        <div class="miembro-card">
+          <span class="rol-tag">Sombras y Matrices</span>
+          <span class="miembro-nombre">Maide Aviza</span>
+          <span class="miembro-desc">Matriz 4x4, sombreado Lambert y sombra proyectada</span>
+        </div>
+      </div>
+    </div>
   </div>
 
-  <div class="panel">
+  <!-- COLUMNA LATERAL: CONTROLES Y MATRIZ MATEMÁTICA 4X4 -->
+  <div class="columna-panel">
     <app-controles></app-controles>
 
-    <div class="matriz">
-      <h3>Matriz de transformación 3D aplicada (4x4)</h3>
-      <pre>{{ transform.matrixText() }}</pre>
+    <!-- TARJETA MATRIZ 4X4 (Maide Aviza) -->
+    <div class="matriz-tarjeta">
+      <div class="matriz-header">
+        <div class="matriz-titulo-wrap">
+          <h4>Matriz de Transformacion 3D (4x4) — Maide Aviza</h4>
+        </div>
+        <span class="matriz-badge">glMatrix: mat4</span>
+      </div>
+
+      <div class="matriz-formula">
+        <code>M = T(x,y,z) · Rz · Ry · Rx · S(sx,sy,sz) · Refl</code>
+      </div>
+
+      <div class="matriz-contenedor">
+        <div class="corchete corchete-izq">[</div>
+        <pre class="matriz-codigo">{{ transform.matrixText() }}</pre>
+        <div class="corchete corchete-der">]</div>
+      </div>
+
+      <div class="matriz-detalles">
+        <div class="detalle-col">
+          <span class="det-lbl">Traslacion:</span>
+          <span class="det-val">({{ transform.tx() }}, {{ transform.ty() }}, {{ transform.tz() }})</span>
+        </div>
+        <div class="detalle-col">
+          <span class="det-lbl">Rotacion:</span>
+          <span class="det-val">({{ transform.rotationXDeg() }}°, {{ transform.rotationYDeg() }}°, {{ transform.rotationZDeg() }}°)</span>
+        </div>
+        <div class="detalle-col">
+          <span class="det-lbl">Escala:</span>
+          <span class="det-val">{{ transform.scale() }}x</span>
+        </div>
+        <div class="detalle-col">
+          <span class="det-lbl">Reflejos:</span>
+          <span class="det-val">
+            X:{{ transform.flipH() ? 'Si' : 'No' }} |
+            Y:{{ transform.flipV() ? 'Si' : 'No' }} |
+            Z:{{ transform.flipZ() ? 'Si' : 'No' }}
+          </span>
+        </div>
+      </div>
     </div>
   </div>
 </section>

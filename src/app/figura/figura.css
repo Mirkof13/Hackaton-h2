@@ -1,42 +1,295 @@
-.figura {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 24px;
-  padding: 16px;
-  font-family: system-ui, sans-serif;
+.figura-layout {
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+  align-items: start;
 }
 
-.lienzo {
-  border: 1px solid #d5d0e6;
-  border-radius: 8px;
-  overflow: hidden;
-  background: #fafafe;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+@media (max-width: 1024px) {
+  .figura-layout {
+    grid-template-columns: 1fr;
+  }
 }
 
-.panel {
+/* -------------------------------------------------------------------------- */
+/* COLUMNA LIENZO */
+/* -------------------------------------------------------------------------- */
+.columna-lienzo {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  min-width: 260px;
 }
 
-.matriz {
-  background: #1c2a4a;
-  color: #e7ecff;
-  border-radius: 8px;
-  padding: 12px 16px;
+.lienzo-tarjeta {
+  background: #ffffff;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
-.matriz h3 {
-  margin: 0 0 8px;
+.lienzo-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 18px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.lienzo-titulo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
   font-size: 0.95rem;
+  color: #0f172a;
+}
+
+.punto-live {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 8px #10b981;
+  display: inline-block;
+  animation: pulso 2s infinite;
+}
+
+@keyframes pulso {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.2); }
+}
+
+.lienzo-stats {
+  display: flex;
+  gap: 12px;
+  font-size: 0.78rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.lienzo-canvas {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: linear-gradient(180deg, #f8fafc 0%, #eef2f6 100%);
+  min-height: 460px;
+}
+
+.lienzo-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 10px 18px;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+  font-size: 0.8rem;
+  color: #475569;
+}
+
+.leyenda-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chip {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  display: inline-block;
+}
+
+.chip-rojo { background: #d93829; }
+.chip-crema { background: #f6eedb; border: 1px solid #d4cca8; }
+.chip-azul { background: #28539e; }
+.chip-hilos { background: #06b6d4; }
+.chip-nodos { background: #eab308; border-radius: 50%; }
+
+/* -------------------------------------------------------------------------- */
+/* TARJETA DE CRÉDITOS DEL EQUIPO */
+/* -------------------------------------------------------------------------- */
+.equipo-tarjeta {
+  background: #ffffff;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  padding: 14px 18px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
+}
+
+.equipo-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.equipo-header h4 {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.badge-tag {
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  border: 1px solid #bfdbfe;
+}
+
+.equipo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
+}
+
+.miembro-card {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  background: #f8fafc;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.rol-tag {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #2563eb;
+  letter-spacing: 0.03em;
+}
+
+.miembro-nombre {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.miembro-desc {
+  font-size: 0.72rem;
+  color: #64748b;
+  line-height: 1.3;
+}
+
+/* -------------------------------------------------------------------------- */
+/* COLUMNA PANEL & MATRIZ 4X4 */
+/* -------------------------------------------------------------------------- */
+.columna-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.matriz-tarjeta {
+  background: #0f172a;
+  color: #f8fafc;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.35);
+  border: 1px solid #1e293b;
+}
+
+.matriz-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.matriz-titulo-wrap h4 {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+
+.matriz-badge {
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
+.matriz-formula {
+  background: rgba(255, 255, 255, 0.05);
+  padding: 6px 10px;
+  border-radius: 6px;
+  margin-bottom: 12px;
+}
+
+.matriz-formula code {
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  font-size: 0.75rem;
+  color: #93c5fd;
+}
+
+.matriz-contenedor {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #020617;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid #1e293b;
+  margin-bottom: 12px;
+}
+
+.corchete {
+  font-size: 3rem;
+  font-weight: 200;
+  color: #64748b;
+  user-select: none;
+  line-height: 1;
+}
+
+.corchete-izq { margin-right: 6px; }
+.corchete-der { margin-left: 6px; }
+
+.matriz-codigo {
+  margin: 0;
+  font-family: 'Cascadia Code', 'Consolas', 'Fira Code', monospace;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: #38bdf8;
+  white-space: pre;
+}
+
+.matriz-detalles {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  border-top: 1px solid #1e293b;
+  padding-top: 10px;
+  font-size: 0.75rem;
+}
+
+.detalle-col {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.det-lbl {
+  color: #94a3b8;
   font-weight: 600;
 }
 
-.matriz pre {
-  margin: 0;
+.det-val {
+  color: #f1f5f9;
   font-family: 'Cascadia Code', 'Consolas', monospace;
-  font-size: 0.9rem;
-  white-space: pre;
 }
