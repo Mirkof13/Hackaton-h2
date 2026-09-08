@@ -1,0 +1,11 @@
+main {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 16px;
+  font-family: system-ui, sans-serif;
+}
+
+h1 {
+  font-size: 1.4rem;
+  color: #1c2a4a;
+}

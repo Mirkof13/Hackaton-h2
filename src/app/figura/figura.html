@@ -1,1 +1,19 @@
-<p>figura works!</p>
+<section class="figura">
+  <div class="lienzo">
+    <ko-stage [config]="configStage">
+      <ko-layer>
+        <ko-shape [config]="configEjes"></ko-shape>
+        <ko-shape [config]="configFigura()"></ko-shape>
+      </ko-layer>
+    </ko-stage>
+  </div>
+
+  <div class="panel">
+    <app-controles></app-controles>
+
+    <div class="matriz">
+      <h3>Matriz de transformación 3D aplicada (4x4)</h3>
+      <pre>{{ transform.matrixText() }}</pre>
+    </div>
+  </div>
+</section>
