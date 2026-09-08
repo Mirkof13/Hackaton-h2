@@ -1,0 +1,116 @@
+<div class="controles">
+  <div class="seccion-header">
+    <h3>Panel de Control de Transformaciones 3D</h3>
+    <span class="badge-tag">Matriz 4x4</span>
+  </div>
+
+  <!-- 1. MOVIMIENTO Y TRASLACIÓN 3D (Mirkof Guzmán) -->
+  <div class="grupo-control">
+    <div class="grupo-titulo">Traslacion 3D — Mirkof Guzman</div>
+    <label>
+      <span class="label-info"><span>Eje X (Horizontal):</span> <b>{{ transform.tx() }} px</b></span>
+      <input type="range" min="-250" max="250" step="1" [value]="transform.tx()" (input)="onTx($event)" />
+    </label>
+
+    <label>
+      <span class="label-info"><span>Eje Y (Vertical):</span> <b>{{ transform.ty() }} px</b></span>
+      <input type="range" min="-180" max="180" step="1" [value]="transform.ty()" (input)="onTy($event)" />
+    </label>
+
+    <label>
+      <span class="label-info"><span>Eje Z (Profundidad):</span> <b>{{ transform.tz() }} px</b></span>
+      <input type="range" min="-200" max="200" step="1" [value]="transform.tz()" (input)="onTz($event)" />
+    </label>
+  </div>
+
+  <!-- 2. ESCALADO (Mirkof Guzmán) -->
+  <div class="grupo-control">
+    <div class="grupo-titulo">Escalado 3D — Mirkof Guzman</div>
+    <label>
+      <span class="label-info"><span>Factor de Escala:</span> <b>{{ transform.scale() }}x</b></span>
+      <input type="range" min="0.2" max="2.5" step="0.05" [value]="transform.scale()" (input)="onScale($event)" />
+    </label>
+  </div>
+
+  <!-- 3. ROTACIÓN DE EULER 3D (Mirkof Guzmán) -->
+  <div class="grupo-control">
+    <div class="grupo-titulo">Rotacion 3D (Euler) — Mirkof Guzman</div>
+    <label>
+      <span class="label-info"><span>Rotacion X (Inclinacion):</span> <b>{{ transform.rotationXDeg() }}°</b></span>
+      <input type="range" min="0" max="360" step="1" [value]="transform.rotationXDeg()" (input)="onRotationX($event)" />
+    </label>
+
+    <label>
+      <span class="label-info"><span>Rotacion Y (Giro Lateral):</span> <b>{{ transform.rotationYDeg() }}°</b></span>
+      <input type="range" min="0" max="360" step="1" [value]="transform.rotationYDeg()" (input)="onRotationY($event)" />
+    </label>
+
+    <label>
+      <span class="label-info"><span>Rotacion Z (En Plano):</span> <b>{{ transform.rotationZDeg() }}°</b></span>
+      <input type="range" min="0" max="360" step="1" [value]="transform.rotationZDeg()" (input)="onRotationZ($event)" />
+    </label>
+  </div>
+
+  <!-- 4. REFLEJOS (Diego Paredes) -->
+  <div class="grupo-control">
+    <div class="grupo-titulo">Reflejos y Simetrias — Diego Paredes</div>
+    <div class="botones">
+      <button type="button" [class.activo]="transform.flipH()" (click)="toggleFlipH()">
+        Reflejar X (Horizontal)
+      </button>
+      <button type="button" [class.activo]="transform.flipV()" (click)="toggleFlipV()">
+        Reflejar Y (Vertical)
+      </button>
+      <button type="button" [class.activo]="transform.flipZ()" (click)="toggleFlipZ()">
+        Reflejar Z (Profundidad)
+      </button>
+      <button type="button" [class.activo]="transform.showFloorReflection()" (click)="toggleFloorReflection()">
+        Reflejo en Suelo
+      </button>
+    </div>
+  </div>
+
+  <!-- 5. MODELADO Y VÉRTICES (Yuri Jesús) -->
+  <div class="grupo-control">
+    <div class="grupo-titulo">Modelado 3D, Hilos y Vertices — Yuri Jesus</div>
+    <div class="botones">
+      <button type="button" [class.activo]="transform.showWireframe()" (click)="toggleWireframe()">
+        Hilos (Aristas)
+      </button>
+      <button type="button" [class.activo]="transform.showVertices()" (click)="toggleVertices()">
+        Vertices 3D
+      </button>
+      <button type="button" [class.activo]="transform.autoRotate()" (click)="toggleAutoRotate()">
+        Giro Automatico
+      </button>
+    </div>
+  </div>
+
+  <!-- 6. VISTAS PREESTABLECIDAS -->
+  <div class="grupo-control">
+    <div class="grupo-titulo">Vistas de Camara</div>
+    <div class="botones">
+      <button type="button" (click)="setIsometric()">Isometrica</button>
+      <button type="button" (click)="setTop()">Superior</button>
+      <button type="button" (click)="setFront()">Frontal</button>
+      <button type="button" (click)="setSide()">Lateral</button>
+    </div>
+  </div>
+
+  <!-- 7. SOMBRA Y MATRICES (Maide Aviza) -->
+  <div class="grupo-control">
+    <div class="grupo-titulo">Sombras — Maide Aviza</div>
+    <div class="botones">
+      <button type="button" [class.activo]="transform.showShadow()" (click)="toggleShadow()">
+        Sombra de Contacto
+      </button>
+    </div>
+  </div>
+
+  <!-- BOTÓN RESET -->
+  <div class="botones-footer">
+    <button type="button" class="reset" (click)="reset()">
+      Restablecer Parametros (Reset)
+    </button>
+  </div>
+</div>

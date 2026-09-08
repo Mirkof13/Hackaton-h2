@@ -1,335 +1,722 @@
-import { AfterViewInit, Component, ElementRef, OnDestroy, ViewChild } from '@angular/core';
-import Konva from 'konva';
-import { mat4, vec3 } from 'gl-matrix';
+/**
+ * PROYECTO: Modelo 3D y Transformaciones Matriciales Afines
+ * EQUIPO DE TRABAJO:
+ * - Yuri Jesús: Modelado 3D (geometría poligonal, vértices, aristas e hilos)
+ * - Mirkof Guzmán: Movimiento y Transformaciones (traslación, rotación, escala)
+ * - Diego Paredes: Reflejos (reflejo especular en suelo, matrices de reflexión)
+ * - Maide Aviza: Sombras y Matrices (matriz 4x4, sombreado Lambert/Phong, sombra proyectada)
+ */
 
-interface Face3D {
-  points: vec3[];
-  color: string;
-  shade: number;
-  normal: vec3;
-  centroid: vec3;
-  isTop: boolean;
-  node?: Konva.Line;
+import { Component, computed, inject, effect, OnDestroy } from '@angular/core';
+import { mat4, vec3, mat3 } from 'gl-matrix';
+import type { Context } from 'konva/lib/Context';
+import type { ShapeConfig } from 'konva/lib/Shape';
+import type { StageConfig } from 'konva/lib/Stage';
+import { CoreShapeComponent, StageComponent } from 'ng2-konva';
+import { Controles } from '../controles/controles';
+import { TransformService } from '../transform.service';
+
+const STAGE_WIDTH = 680;
+const STAGE_HEIGHT = 460;
+const FLOOR_Y = -85; // Altura del plano suelo para reflejo y sombra
+
+export type Punto3D = readonly [number, number, number];
+
+export interface Cara3D {
+  readonly puntos: readonly Punto3D[];
+  readonly normal: Punto3D;
+  readonly colorBase: string;
+  readonly tipoCara?: 'superior_roja' | 'superior_azul' | 'otra';
+}
+
+// ---------------------------------------------------------------------------
+// 1. MODELADO 3D (Responsable: Yuri Jesús)
+// ---------------------------------------------------------------------------
+
+function calcularNormalCara(p0: Punto3D, p1: Punto3D, p2: Punto3D): Punto3D {
+  const v1 = vec3.fromValues(p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]);
+  const v2 = vec3.fromValues(p2[0] - p0[0], p2[1] - p0[1], p2[2] - p0[2]);
+  const n = vec3.create();
+  vec3.cross(n, v1, v2);
+  vec3.normalize(n, n);
+  return [n[0], n[1], n[2]];
+}
+
+function crearBloqueBiselado(
+  xIzqInf: number,
+  xIzqSup: number,
+  xDerInf: number,
+  xDerSup: number,
+  yMin: number,
+  yMax: number,
+  zMin: number,
+  zMax: number,
+  color: string,
+  tipoSuperior?: 'superior_roja' | 'superior_azul'
+): Cara3D[] {
+  // 8 vértices del poliedro en coordenadas locales 3D
+  const p000: Punto3D = [xIzqInf, yMin, zMin]; // 0: Izq-Inf-Frente
+  const p100: Punto3D = [xDerInf, yMin, zMin]; // 1: Der-Inf-Frente
+  const p101: Punto3D = [xDerInf, yMin, zMax]; // 2: Der-Inf-Atrás
+  const p001: Punto3D = [xIzqInf, yMin, zMax]; // 3: Izq-Inf-Atrás
+
+  const p010: Punto3D = [xIzqSup, yMax, zMin]; // 4: Izq-Sup-Frente
+  const p110: Punto3D = [xDerSup, yMax, zMin]; // 5: Der-Sup-Frente
+  const p111: Punto3D = [xDerSup, yMax, zMax]; // 6: Der-Sup-Atrás
+  const p011: Punto3D = [xIzqSup, yMax, zMax]; // 7: Izq-Sup-Atrás
+
+  const carasDef: { puntos: Punto3D[]; color: string; tipo?: 'superior_roja' | 'superior_azul' }[] = [
+    // Cara Inferior (-Y)
+    { puntos: [p000, p001, p101, p100], color },
+    // Cara Superior (+Y)
+    { puntos: [p010, p110, p111, p011], color, tipo: tipoSuperior },
+    // Cara Frontal (-Z)
+    { puntos: [p000, p100, p110, p010], color },
+    // Cara Posterior (+Z)
+    { puntos: [p101, p001, p011, p111], color },
+    // Extremo Izquierdo (Cuña roja)
+    { puntos: [p001, p000, p010, p011], color },
+    // Extremo Derecho (Cuña azul)
+    { puntos: [p100, p101, p111, p110], color },
+  ];
+
+  return carasDef.map((c) => ({
+    puntos: c.puntos,
+    normal: calcularNormalCara(c.puntos[0], c.puntos[1], c.puntos[2]),
+    colorBase: c.color,
+    tipoCara: c.tipo || 'otra',
+  }));
+}
+
+function construirMallaPelikan(): Cara3D[] {
+  // Proporciones fieles de la goma Pelikan BR40
+  const SLANT = 15; // Inclinación en cuña en los extremos
+  const X_IZQ_BASE = -115;
+  const X_DIV = 22; // Divisoria: 65% rojo (lápiz) y 35% azul (tinta)
+  const X_DER_BASE = 95;
+
+  const Y_INF = -14;
+  const Y_FRANJA_INF = -2.5;
+  const Y_FRANJA_SUP = 2.5;
+  const Y_SUP = 14;
+
+  const Z_MIN = -34;
+  const Z_MAX = 34;
+
+  const ROJO = '#d93829';
+  const CREMA = '#f6eedb';
+  const AZUL = '#28539e';
+
+  const xIzq = (y: number) => X_IZQ_BASE + ((y - Y_INF) / (Y_SUP - Y_INF)) * SLANT;
+  const xDer = (y: number) => X_DER_BASE + ((y - Y_INF) / (Y_SUP - Y_INF)) * SLANT;
+
+  return [
+    // Capa Inferior Roja
+    ...crearBloqueBiselado(
+      xIzq(Y_INF), xIzq(Y_FRANJA_INF),
+      X_DIV, X_DIV,
+      Y_INF, Y_FRANJA_INF,
+      Z_MIN, Z_MAX,
+      ROJO
+    ),
+    // Capa Inferior Azul
+    ...crearBloqueBiselado(
+      X_DIV, X_DIV,
+      xDer(Y_INF), xDer(Y_FRANJA_INF),
+      Y_INF, Y_FRANJA_INF,
+      Z_MIN, Z_MAX,
+      AZUL
+    ),
+    // Faja Central Crema (Lado Rojo)
+    ...crearBloqueBiselado(
+      xIzq(Y_FRANJA_INF), xIzq(Y_FRANJA_SUP),
+      X_DIV, X_DIV,
+      Y_FRANJA_INF, Y_FRANJA_SUP,
+      Z_MIN, Z_MAX,
+      CREMA
+    ),
+    // Faja Central Crema (Lado Azul)
+    ...crearBloqueBiselado(
+      X_DIV, X_DIV,
+      xDer(Y_FRANJA_INF), xDer(Y_FRANJA_SUP),
+      Y_FRANJA_INF, Y_FRANJA_SUP,
+      Z_MIN, Z_MAX,
+      CREMA
+    ),
+    // Capa Superior Roja (con serigrafía Pelikan y lápiz)
+    ...crearBloqueBiselado(
+      xIzq(Y_FRANJA_SUP), xIzq(Y_SUP),
+      X_DIV, X_DIV,
+      Y_FRANJA_SUP, Y_SUP,
+      Z_MIN, Z_MAX,
+      ROJO,
+      'superior_roja'
+    ),
+    // Capa Superior Azul (con icono de pluma estilográfica)
+    ...crearBloqueBiselado(
+      X_DIV, X_DIV,
+      xDer(Y_FRANJA_SUP), xDer(Y_SUP),
+      Y_FRANJA_SUP, Y_SUP,
+      Z_MIN, Z_MAX,
+      AZUL,
+      'superior_azul'
+    ),
+  ];
+}
+
+const MALLA_PELIKAN = construirMallaPelikan();
+
+// Extracción de vértices únicos (para visualización de Vértices)
+function obtenerVerticesUnicos(malla: Cara3D[]): Punto3D[] {
+  const mapa = new Map<string, Punto3D>();
+  for (const c of malla) {
+    for (const p of c.puntos) {
+      const k = `${p[0].toFixed(1)}_${p[1].toFixed(1)}_${p[2].toFixed(1)}`;
+      if (!mapa.has(k)) mapa.set(k, p);
+    }
+  }
+  return Array.from(mapa.values());
+}
+
+const VERTICES_UNICOS = obtenerVerticesUnicos(MALLA_PELIKAN);
+
+// Extracción de aristas únicas (para visualización de Hilos)
+function obtenerAristasUnicas(malla: Cara3D[]): [Punto3D, Punto3D][] {
+  const mapa = new Map<string, [Punto3D, Punto3D]>();
+  for (const c of malla) {
+    for (let i = 0; i < c.puntos.length; i++) {
+      const pA = c.puntos[i];
+      const pB = c.puntos[(i + 1) % c.puntos.length];
+      const kA = `${pA[0].toFixed(1)},${pA[1].toFixed(1)},${pA[2].toFixed(1)}`;
+      const kB = `${pB[0].toFixed(1)},${pB[1].toFixed(1)},${pB[2].toFixed(1)}`;
+      const key = kA < kB ? `${kA}|${kB}` : `${kB}|${kA}`;
+      if (!mapa.has(key)) mapa.set(key, [pA, pB]);
+    }
+  }
+  return Array.from(mapa.values());
+}
+
+const ARISTAS_UNICAS = obtenerAristasUnicas(MALLA_PELIKAN);
+
+// ---------------------------------------------------------------------------
+// 2. MATRICES, CÁMARA Y PERSPECTIVA (Responsable: Maide Aviza)
+// ---------------------------------------------------------------------------
+const VISTA = mat4.lookAt(mat4.create(), [0, 45, 430], [0, 0, 0], [0, 1, 0]);
+const PROYECCION = mat4.perspective(
+  mat4.create(),
+  (42 * Math.PI) / 180,
+  STAGE_WIDTH / STAGE_HEIGHT,
+  10,
+  2000
+);
+const VISTA_PROYECCION = mat4.multiply(mat4.create(), PROYECCION, VISTA);
+
+// Vector de luz direccional en el espacio de mundo
+const LUZ_DIR = vec3.fromValues(0.4, 0.85, 0.55);
+vec3.normalize(LUZ_DIR, LUZ_DIR);
+
+interface CaraProyectada {
+  readonly pantalla: readonly [number, number][];
+  readonly profundidad: number;
+  readonly colorFinal: string;
+  readonly normalMundo: Punto3D;
+  readonly tipoCara: 'superior_roja' | 'superior_azul' | 'otra';
+  readonly puntosMundo: Punto3D[];
+  readonly puntosOriginales: readonly Punto3D[];
 }
 
 @Component({
-  imports: [],
+  imports: [StageComponent, CoreShapeComponent, Controles],
   selector: 'app-figura',
   styleUrl: './figura.css',
   templateUrl: './figura.html',
 })
-export class Figura implements AfterViewInit, OnDestroy {
-  @ViewChild('canvas', { static: true })
-  private readonly canvas!: ElementRef<HTMLDivElement>;
+export class Figura implements OnDestroy {
+  protected readonly transform = inject(TransformService);
+  private animFrameId: number | null = null;
 
-  private stage?: Konva.Stage;
-  private layer?: Konva.Layer;
-  private groundShadow?: Konva.Ellipse;
-  private textShape?: Konva.Shape;
-  private resizeObserver?: ResizeObserver;
+  protected readonly configStage: Partial<StageConfig> = {
+    width: STAGE_WIDTH,
+    height: STAGE_HEIGHT,
+  };
 
-  // --- dimensiones del borrador ---
-  private readonly L = 3.4;
-  private readonly W = 1.0;
-  private readonly H = 0.85;
-  private readonly bevelW = 0.09;   // franja crema: ancho
-  private readonly bevelH = 0.08;   // franja crema: alto
-  private readonly tipCut = 0.55;   // largo de la zona cónica en cada punta
-  private readonly tipShrink = 0.66; // cuánto se achica el perfil en la punta
-  private readonly split = 0.56 * this.L; // frontera rojo/azul
-
-  private flatHalf = 0;       // mitad de largo de la sección recta (sin puntas)
-  private topHalfDepth = 0;
-  private faces: Face3D[] = [];
-  private topEdgeLeft!: vec3;
-  private topEdgeRight!: vec3;
-  private topCenter!: vec3;
-
-  // --- cámara orbital ---
-  private theta = 0.42;
-  private phi = 0.34;
-  private radius = 9.5;
-  private readonly target = vec3.fromValues(0, 0, this.H * 0.55);
-  private readonly up = vec3.fromValues(0, 0, 1);
-  private readonly lightDir = vec3.normalize(vec3.create(), vec3.fromValues(0.35, -0.55, 0.82));
-
-  private dragging = false;
-  private lastX = 0;
-  private lastY = 0;
-  private textTransform = { x: 0, y: 0, angle: 0, scale: 1 };
-
-  ngAfterViewInit(): void {
-    this.buildGeometry();
-    this.initStage();
-    this.render();
+  constructor() {
+    effect(() => {
+      if (this.transform.autoRotate()) {
+        this.iniciarAutoRotacion();
+      } else {
+        this.detenerAutoRotacion();
+      }
+    });
   }
 
   ngOnDestroy(): void {
-    this.resizeObserver?.disconnect();
-    this.stage?.destroy();
+    this.detenerAutoRotacion();
   }
 
-  // ------------------------------------------------------------------
-  // Geometría 3D
-  // ------------------------------------------------------------------
-  private buildGeometry(): void {
-    const { L, W, H, bevelW, bevelH, split, tipCut, tipShrink } = this;
-    const v = (x: number, y: number, z: number) => vec3.fromValues(x, y, z);
-    const interior = v(0, 0, H * 0.4);
-    const flatHalf = L - tipCut;
-    this.flatHalf = flatHalf;
-
-    const red = '#d8261f';
-    const blue = '#1a63c9';
-    const cream = '#f1ead2';
-    const sole = '#7a1814';
-
-    const yFront = -W;
-    const yBevelBack = -W + bevelW;
-    const zBevelTop = H - bevelH;
-    this.topHalfDepth = (W - yBevelBack) / 2;
-
-    const face = (pts: vec3[], color: string): Face3D => {
-      const e1 = vec3.subtract(vec3.create(), pts[1], pts[0]);
-      const e2 = vec3.subtract(vec3.create(), pts[2], pts[0]);
-      const normal = vec3.normalize(vec3.create(), vec3.cross(vec3.create(), e1, e2));
-      const centroid = pts.reduce((acc, p) => vec3.add(acc, acc, p), vec3.create());
-      vec3.scale(centroid, centroid, 1 / pts.length);
-      const outward = vec3.subtract(vec3.create(), centroid, interior);
-      let ordered = pts;
-      if (vec3.dot(normal, outward) < 0) {
-        ordered = [...pts].reverse();
-        vec3.scale(normal, normal, -1);
-      }
-      const lambert = Math.max(vec3.dot(normal, this.lightDir), 0);
-      const isTop = ordered.every((p) => Math.abs(p[2] - H) < 1e-6);
-      return { points: ordered, color, normal, centroid, shade: 0.42 + 0.58 * lambert, isTop };
+  private iniciarAutoRotacion(): void {
+    this.detenerAutoRotacion();
+    const bucle = () => {
+      if (!this.transform.autoRotate()) return;
+      this.transform.rotationYDeg.update((v) => (v + 0.8) % 360);
+      this.transform.rotationXDeg.update((v) => (v + 0.25) % 360);
+      this.animFrameId = requestAnimationFrame(bucle);
     };
+    this.animFrameId = requestAnimationFrame(bucle);
+  }
 
-    // ---- sección recta central ----
-    const longFace = (y: number, z0: number, z1: number, cA: string, cB: string): Face3D[] => [
-      face([v(-flatHalf, y, z0), v(split, y, z0), v(split, y, z1), v(-flatHalf, y, z1)], cA),
-      face([v(split, y, z0), v(flatHalf, y, z0), v(flatHalf, y, z1), v(split, y, z1)], cB),
+  private detenerAutoRotacion(): void {
+    if (this.animFrameId !== null) {
+      cancelAnimationFrame(this.animFrameId);
+      this.animFrameId = null;
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // 3. ILUMINACIÓN Y SOMBREADO LAMBERT/PHONG (Responsable: Maide Aviza)
+  // -------------------------------------------------------------------------
+  private calcularSombreado(colorHex: string, normalMundo: vec3): string {
+    const dot = Math.max(0, vec3.dot(normalMundo, LUZ_DIR));
+    // Factor de iluminación: 55% ambiente + 45% difusión para mantener colores vivos y nítidos
+    const factorLuz = Math.min(1.25, Math.max(0.35, 0.55 + 0.45 * dot));
+
+    const r = parseInt(colorHex.slice(1, 3), 16);
+    const g = parseInt(colorHex.slice(3, 5), 16);
+    const b = parseInt(colorHex.slice(5, 7), 16);
+
+    const rFinal = Math.min(255, Math.round(r * factorLuz));
+    const gFinal = Math.min(255, Math.round(g * factorLuz));
+    const bFinal = Math.min(255, Math.round(b * factorLuz));
+
+    return `rgb(${rFinal}, ${gFinal}, ${bFinal})`;
+  }
+
+  private proyectarCaras(matrizModelo: mat4): CaraProyectada[] {
+    const matrizFinal = mat4.multiply(mat4.create(), VISTA_PROYECCION, matrizModelo);
+
+    const matrizNormal = mat3.create();
+    mat3.fromMat4(matrizNormal, matrizModelo);
+    mat3.invert(matrizNormal, matrizNormal);
+    mat3.transpose(matrizNormal, matrizNormal);
+
+    return MALLA_PELIKAN.map((cara) => {
+      const nLocal = vec3.fromValues(...cara.normal);
+      const nMundo = vec3.create();
+      vec3.transformMat3(nMundo, nLocal, matrizNormal);
+      vec3.normalize(nMundo, nMundo);
+
+      const puntosPantalla: [number, number][] = [];
+      const puntosMundo: Punto3D[] = [];
+      let sumaZ = 0;
+
+      for (const p of cara.puntos) {
+        const pVec = vec3.fromValues(...p);
+        const pM = vec3.create();
+        vec3.transformMat4(pM, pVec, matrizModelo);
+        puntosMundo.push([pM[0], pM[1], pM[2]]);
+
+        const ndc = vec3.create();
+        vec3.transformMat4(ndc, pVec, matrizFinal);
+        const x = (ndc[0] * 0.5 + 0.5) * STAGE_WIDTH;
+        const y = (1 - (ndc[1] * 0.5 + 0.5)) * STAGE_HEIGHT;
+        puntosPantalla.push([x, y]);
+        sumaZ += ndc[2];
+      }
+
+      const profundidad = sumaZ / cara.puntos.length;
+      const colorFinal = this.calcularSombreado(cara.colorBase, nMundo);
+
+      return {
+        pantalla: puntosPantalla,
+        profundidad,
+        colorFinal,
+        normalMundo: [nMundo[0], nMundo[1], nMundo[2]],
+        tipoCara: cara.tipoCara || 'otra',
+        puntosMundo,
+        puntosOriginales: cara.puntos,
+      };
+    });
+  }
+
+  private proyectarPuntoMundo(p: Punto3D): [number, number] {
+    const ndc = vec3.create();
+    vec3.transformMat4(ndc, p as unknown as vec3, VISTA_PROYECCION);
+    return [
+      (ndc[0] * 0.5 + 0.5) * STAGE_WIDTH,
+      (1 - (ndc[1] * 0.5 + 0.5)) * STAGE_HEIGHT,
     ];
+  }
 
-    this.faces.push(...longFace(yFront, 0, zBevelTop, red, blue));
-    this.faces.push(face([
-      v(-flatHalf, yFront, zBevelTop), v(flatHalf, yFront, zBevelTop),
-      v(flatHalf, yBevelBack, H), v(-flatHalf, yBevelBack, H),
-    ], cream));
-    this.faces.push(face([v(-flatHalf, yBevelBack, H), v(split, yBevelBack, H), v(split, W, H), v(-flatHalf, W, H)], red));
-    this.faces.push(face([v(split, yBevelBack, H), v(flatHalf, yBevelBack, H), v(flatHalf, W, H), v(split, W, H)], blue));
-    this.faces.push(...longFace(W, 0, H, red, blue));
-    this.faces.push(face([v(-flatHalf, yFront, 0), v(flatHalf, yFront, 0), v(flatHalf, W, 0), v(-flatHalf, W, 0)], sole));
+  // -------------------------------------------------------------------------
+  // CUADRÍCULA Y EJES CARTESIANOS 3D
+  // -------------------------------------------------------------------------
+  protected readonly configEjes = computed<ShapeConfig>(() => {
+    this.transform.showAxes();
 
-    // ---- puntas cónicas ----
-    const cross = (x: number, s: number) => ({
-      fb: v(x, -W * s, 0),
-      ft: v(x, -W * s, (H - bevelH) * s),
-      tf: v(x, (-W + bevelW) * s, H * s),
-      tb: v(x, W * s, H * s),
-      bb: v(x, W * s, 0),
+    return {
+      listening: false,
+      sceneFunc: (ctx: Context) => {
+        ctx.save();
+
+        // 1. Cuadrícula Suelo en Y = FLOOR_Y
+        ctx.strokeStyle = '#e2e8f0';
+        ctx.lineWidth = 1;
+        const GRID = 260;
+        const STEP = 52;
+        for (let x = -GRID; x <= GRID; x += STEP) {
+          const p1 = this.proyectarPuntoMundo([x, FLOOR_Y, -GRID]);
+          const p2 = this.proyectarPuntoMundo([x, FLOOR_Y, GRID]);
+          ctx.beginPath();
+          ctx.moveTo(p1[0], p1[1]);
+          ctx.lineTo(p2[0], p2[1]);
+          ctx.stroke();
+        }
+        for (let z = -GRID; z <= GRID; z += STEP) {
+          const p1 = this.proyectarPuntoMundo([-GRID, FLOOR_Y, z]);
+          const p2 = this.proyectarPuntoMundo([GRID, FLOOR_Y, z]);
+          ctx.beginPath();
+          ctx.moveTo(p1[0], p1[1]);
+          ctx.lineTo(p2[0], p2[1]);
+          ctx.stroke();
+        }
+
+        // 2. Ejes 3D en el origen
+        if (this.transform.showAxes()) {
+          const origen = this.proyectarPuntoMundo([0, 0, 0]);
+          const ejeX = this.proyectarPuntoMundo([160, 0, 0]);
+          const ejeY = this.proyectarPuntoMundo([0, 140, 0]);
+          const ejeZ = this.proyectarPuntoMundo([0, 0, 160]);
+
+          // Eje X (Rojo)
+          ctx.strokeStyle = '#dc2626';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(origen[0], origen[1]);
+          ctx.lineTo(ejeX[0], ejeX[1]);
+          ctx.stroke();
+          ctx.fillStyle = '#dc2626';
+          ctx.font = 'bold 11px sans-serif';
+          ctx.fillText('+X (Ancho)', ejeX[0] + 6, ejeX[1] + 4);
+
+          // Eje Y (Verde)
+          ctx.strokeStyle = '#16a34a';
+          ctx.beginPath();
+          ctx.moveTo(origen[0], origen[1]);
+          ctx.lineTo(ejeY[0], ejeY[1]);
+          ctx.stroke();
+          ctx.fillStyle = '#16a34a';
+          ctx.fillText('+Y (Alto)', ejeY[0] - 15, ejeY[1] - 6);
+
+          // Eje Z (Azul)
+          ctx.strokeStyle = '#2563eb';
+          ctx.beginPath();
+          ctx.moveTo(origen[0], origen[1]);
+          ctx.lineTo(ejeZ[0], ejeZ[1]);
+          ctx.stroke();
+          ctx.fillStyle = '#2563eb';
+          ctx.fillText('+Z (Profundidad)', ejeZ[0] + 6, ejeZ[1] + 6);
+        }
+
+        ctx.restore();
+      },
+    };
+  });
+
+  // -------------------------------------------------------------------------
+  // 4. RENDERIZADO DEL MODELO 3D Y REFLEJOS (Responsables: Yuri, Diego, Maide)
+  // -------------------------------------------------------------------------
+  protected readonly configFigura = computed<ShapeConfig>(() => {
+    const modelo = this.transform.matrix4();
+    const matrizFinal = mat4.multiply(mat4.create(), VISTA_PROYECCION, modelo);
+
+    // Caras ordenadas por profundidad (Algoritmo del Pintor)
+    const carasPrincipales = this.proyectarCaras(modelo)
+      .sort((a, b) => b.profundidad - a.profundidad);
+
+    // 4.1 REFLEJO ESPECULAR EN SUELO (Responsable: Diego Paredes)
+    let carasReflejo: CaraProyectada[] = [];
+    if (this.transform.showFloorReflection()) {
+      const matrizReflejo = mat4.create();
+      mat4.translate(matrizReflejo, matrizReflejo, [0, FLOOR_Y, 0]);
+      mat4.scale(matrizReflejo, matrizReflejo, [1, -1, 1]);
+      mat4.translate(matrizReflejo, matrizReflejo, [0, -FLOOR_Y, 0]);
+      mat4.multiply(matrizReflejo, matrizReflejo, modelo);
+
+      carasReflejo = this.proyectarCaras(matrizReflejo)
+        .sort((a, b) => b.profundidad - a.profundidad);
+    }
+
+    // 4.2 HILOS Y VÉRTICES (Responsable: Yuri Jesús)
+    const showHilos = this.transform.showWireframe();
+    const showVertices = this.transform.showVertices();
+
+    const verticesPantalla = VERTICES_UNICOS.map((v) => {
+      const ndc = vec3.create();
+      vec3.transformMat4(ndc, v as unknown as vec3, matrizFinal);
+      return {
+        x: (ndc[0] * 0.5 + 0.5) * STAGE_WIDTH,
+        y: (1 - (ndc[1] * 0.5 + 0.5)) * STAGE_HEIGHT,
+        z: ndc[2],
+      };
     });
 
-    const strip = (xA: number, xB: number, sB: number, color: string): Face3D[] => {
-      const A = cross(xA, 1);
-      const B = cross(xB, sB);
+    const aristasPantalla = ARISTAS_UNICAS.map(([vA, vB]) => {
+      const ndcA = vec3.create();
+      const ndcB = vec3.create();
+      vec3.transformMat4(ndcA, vA as unknown as vec3, matrizFinal);
+      vec3.transformMat4(ndcB, vB as unknown as vec3, matrizFinal);
+      return {
+        p1: [
+          (ndcA[0] * 0.5 + 0.5) * STAGE_WIDTH,
+          (1 - (ndcA[1] * 0.5 + 0.5)) * STAGE_HEIGHT,
+        ] as [number, number],
+        p2: [
+          (ndcB[0] * 0.5 + 0.5) * STAGE_WIDTH,
+          (1 - (ndcB[1] * 0.5 + 0.5)) * STAGE_HEIGHT,
+        ] as [number, number],
+      };
+    });
+
+    return {
+      listening: false,
+      sceneFunc: (ctx: Context) => {
+        ctx.save();
+
+        // -------------------------------------------------------------------
+        // A. SOMBRA DINÁMICA DE CONTACTO EN EL SUELO (Responsable: Maide Aviza)
+        // -------------------------------------------------------------------
+        if (this.transform.showShadow()) {
+          const escala = Math.abs(this.transform.scale());
+          const posX = this.transform.tx();
+          const posZ = this.transform.tz();
+          const posY = this.transform.ty();
+
+          const centroSombra = this.proyectarPuntoMundo([posX, FLOOR_Y + 1, posZ]);
+          // La sombra se atenúa y expande conforme el objeto sube en el eje Y
+          const factorAltura = Math.max(0.3, Math.min(1.5, 1 - (posY / 300)));
+          const radioX = Math.max(20, 115 * escala * factorAltura);
+          const radioY = Math.max(8, 40 * escala * factorAltura);
+
+          ctx.save();
+          ctx.beginPath();
+          ctx.ellipse(centroSombra[0], centroSombra[1], radioX, radioY, 0, 0, Math.PI * 2);
+          const grad = ctx.createRadialGradient(
+            centroSombra[0], centroSombra[1], 0,
+            centroSombra[0], centroSombra[1], radioX
+          );
+          grad.addColorStop(0, 'rgba(15, 23, 42, 0.40)');
+          grad.addColorStop(0.5, 'rgba(30, 41, 59, 0.18)');
+          grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+          ctx.fillStyle = grad;
+          ctx.fill();
+          ctx.restore();
+        }
+
+        // -------------------------------------------------------------------
+        // B. REFLEJO 3D EN EL SUELO (Responsable: Diego Paredes)
+        // -------------------------------------------------------------------
+        if (this.transform.showFloorReflection() && carasReflejo.length > 0) {
+          ctx.save();
+          ctx.globalAlpha = 0.28;
+          for (const c of carasReflejo) {
+            ctx.beginPath();
+            const [p0, ...resto] = c.pantalla;
+            ctx.moveTo(p0[0], p0[1]);
+            for (const [x, y] of resto) {
+              ctx.lineTo(x, y);
+            }
+            ctx.closePath();
+            ctx.fillStyle = c.colorFinal;
+            ctx.fill();
+          }
+          ctx.restore();
+        }
+
+        // -------------------------------------------------------------------
+        // C. CUERPO SÓLIDO 3D DE LA GOMA (Responsables: Yuri Jesús, Maide Aviza)
+        // -------------------------------------------------------------------
+        for (const c of carasPrincipales) {
+          ctx.beginPath();
+          const [p0, ...resto] = c.pantalla;
+          ctx.moveTo(p0[0], p0[1]);
+          for (const [x, y] of resto) {
+            ctx.lineTo(x, y);
+          }
+          ctx.closePath();
+          ctx.fillStyle = c.colorFinal;
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(15, 23, 42, 0.35)';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+
+          // -----------------------------------------------------------------
+          // D. SERIGRAFÍA Y LETRAS 100% PEGADAS A LA GOMA (Mapeo Paramétrico)
+          // -----------------------------------------------------------------
+          // Solo se dibuja si la cara es superior y la normal apunta hacia la cámara
+          if ((c.tipoCara === 'superior_roja' || c.tipoCara === 'superior_azul') && c.normalMundo[1] > -0.05) {
+            this.dibujarSerigrafia3D(ctx, c, matrizFinal);
+          }
+        }
+
+        // -------------------------------------------------------------------
+        // E. MODO HILOS (Aristas 3D / Wireframe) (Responsable: Yuri Jesús)
+        // -------------------------------------------------------------------
+        if (showHilos) {
+          ctx.save();
+          ctx.strokeStyle = '#06b6d4';
+          ctx.lineWidth = 1.3;
+          ctx.globalAlpha = 0.85;
+          for (const a of aristasPantalla) {
+            ctx.beginPath();
+            ctx.moveTo(a.p1[0], a.p1[1]);
+            ctx.lineTo(a.p2[0], a.p2[1]);
+            ctx.stroke();
+          }
+          ctx.restore();
+        }
+
+        // -------------------------------------------------------------------
+        // F. MODO VÉRTICES (Nodos 3D) (Responsable: Yuri Jesús)
+        // -------------------------------------------------------------------
+        if (showVertices) {
+          ctx.save();
+          for (const v of verticesPantalla) {
+            ctx.beginPath();
+            ctx.arc(v.x, v.y, 3.2, 0, Math.PI * 2);
+            ctx.fillStyle = '#eab308';
+            ctx.fill();
+            ctx.strokeStyle = '#1e293b';
+            ctx.lineWidth = 0.8;
+            ctx.stroke();
+          }
+          ctx.restore();
+        }
+
+        ctx.restore();
+      },
+    };
+  });
+
+  /**
+   * DIBUJO DE SERIGRAFÍA Y MARCA PELIKAN BR 40 MEDIANTE PROYECCIÓN 3D EXACTA
+   * Cada trazo, texto e icono se proyecta mediante la matriz de transformación
+   * garantizando que esté 100% pegado a la superficie al rotar, escalar o reflejar.
+   */
+  private dibujarSerigrafia3D(
+    ctx: Context,
+    cara: CaraProyectada,
+    matrizFinal: mat4
+  ): void {
+    ctx.save();
+    ctx.fillStyle = '#18181b';
+    ctx.strokeStyle = '#18181b';
+    ctx.lineWidth = 1.5;
+
+    // Función de proyección para cualquier coordenada (X, Z) en la superficie superior Y = 14.05
+    const proyectarUV = (x: number, z: number): [number, number] => {
+      const p = vec3.fromValues(x, 14.1, z);
+      const ndc = vec3.create();
+      vec3.transformMat4(ndc, p, matrizFinal);
       return [
-        face([A.fb, B.fb, B.ft, A.ft], color),
-        face([A.ft, B.ft, B.tf, A.tf], cream),
-        face([A.tf, B.tf, B.tb, A.tb], color),
-        face([A.tb, B.tb, B.bb, A.bb], color),
-        face([A.bb, B.bb, B.fb, A.fb], sole),
+        (ndc[0] * 0.5 + 0.5) * STAGE_WIDTH,
+        (1 - (ndc[1] * 0.5 + 0.5)) * STAGE_HEIGHT,
       ];
     };
-    const capAt = (x: number, s: number, color: string): Face3D => {
-      const c = cross(x, s);
-      return face([c.fb, c.ft, c.tf, c.tb, c.bb], color);
-    };
 
-    this.faces.push(...strip(-flatHalf, -L, tipShrink, red));
-    this.faces.push(capAt(-L, tipShrink, red));
-    this.faces.push(...strip(flatHalf, L, tipShrink, blue));
-    this.faces.push(capAt(L, tipShrink, blue));
+    if (cara.tipoCara === 'superior_roja') {
+      // 1. ÍCONO DE LÁPIZ (Lado rojo izquierdo)
+      const pRec1 = proyectarUV(-88, -14);
+      const pRec2 = proyectarUV(-68, -14);
+      const pRec3 = proyectarUV(-68, 14);
+      const pRec4 = proyectarUV(-88, 14);
 
-    this.topEdgeLeft = v(-flatHalf, yBevelBack, H);
-    this.topEdgeRight = v(flatHalf, yBevelBack, H);
-    this.topCenter = v(0, (yBevelBack + W) / 2, H);
-  }
+      ctx.beginPath();
+      ctx.moveTo(pRec1[0], pRec1[1]);
+      ctx.lineTo(pRec2[0], pRec2[1]);
+      ctx.lineTo(pRec3[0], pRec3[1]);
+      ctx.lineTo(pRec4[0], pRec4[1]);
+      ctx.closePath();
+      ctx.stroke();
 
-  // ------------------------------------------------------------------
-  // Escena Konva
-  // ------------------------------------------------------------------
-  private initStage(): void {
-    const container = this.canvas.nativeElement;
-    container.style.touchAction = 'none';
+      // Punta de lápiz interior
+      const pPunta = proyectarUV(-78, -10);
+      const pBaseIzq = proyectarUV(-84, 9);
+      const pBaseDer = proyectarUV(-72, 9);
+      ctx.beginPath();
+      ctx.moveTo(pPunta[0], pPunta[1]);
+      ctx.lineTo(pBaseIzq[0], pBaseIzq[1]);
+      ctx.lineTo(pBaseDer[0], pBaseDer[1]);
+      ctx.closePath();
+      ctx.fill();
 
-    const width = Math.min(container.clientWidth || 900, 1000);
-    const height = Math.round(width * 0.56);
+      // 2. TEXTO "Pelikan" (Centro de la sección roja)
+      const pTxtIni = proyectarUV(-48, 1);
+      const pTxtFin = proyectarUV(-10, 1);
+      const dx = pTxtFin[0] - pTxtIni[0];
+      const dy = pTxtFin[1] - pTxtIni[1];
+      const dist = Math.hypot(dx, dy);
+      const angulo = Math.atan2(dy, dx);
 
-    this.stage = new Konva.Stage({ container, width, height });
-    this.layer = new Konva.Layer();
-    this.stage.add(this.layer);
+      if (dist > 14) {
+        ctx.save();
+        ctx.translate(pTxtIni[0], pTxtIni[1]);
+        ctx.rotate(angulo);
+        const tamFuente = Math.max(8, Math.min(22, dist * 0.36));
+        ctx.font = `italic bold ${tamFuente}px 'Trebuchet MS', Arial, sans-serif`;
+        ctx.fillText('Pelikan', 0, 0);
 
-    this.groundShadow = new Konva.Ellipse({
-      x: width / 2, y: height * 0.86, radiusX: width * 0.34, radiusY: height * 0.07,
-      fill: 'rgba(35, 25, 18, 0.22)',
-    });
-    this.layer.add(this.groundShadow);
-
-    for (const f of this.faces) {
-      f.node = new Konva.Line({ closed: true, strokeWidth: 1, stroke: 'rgba(20, 10, 8, 0.18)' });
-      this.layer.add(f.node);
-    }
-
-    this.textShape = new Konva.Shape({
-      sceneFunc: (ctx) => {
-        const native = (ctx as unknown as { _context: CanvasRenderingContext2D })._context;
-        native.save();
-        const t = this.textTransform;
-        native.translate(t.x, t.y);
-        native.rotate(t.angle);
-        native.scale(t.scale, t.scale);
-        this.drawTopArtwork(native);
-        native.restore();
-      },
-    });
-    this.layer.add(this.textShape);
-
-    this.stage.on('pointerdown', (e) => {
-      this.dragging = true;
-      this.lastX = e.evt.clientX;
-      this.lastY = e.evt.clientY;
-    });
-    this.stage.on('pointermove', (e) => {
-      if (!this.dragging) return;
-      const dx = e.evt.clientX - this.lastX;
-      const dy = e.evt.clientY - this.lastY;
-      this.lastX = e.evt.clientX;
-      this.lastY = e.evt.clientY;
-      this.theta += dx * 0.008;
-      this.phi = Math.min(1.25, Math.max(0.12, this.phi - dy * 0.008));
-      this.render();
-    });
-    this.stage.on('pointerup pointerleave pointercancel', () => (this.dragging = false));
-
-    container.addEventListener('wheel', (e) => {
-      e.preventDefault();
-      this.radius = Math.min(15, Math.max(5.5, this.radius + e.deltaY * 0.01));
-      this.render();
-    }, { passive: false });
-
-    this.resizeObserver = new ResizeObserver(() => {
-      const w = Math.min(container.clientWidth || 900, 1000);
-      const h = Math.round(w * 0.56);
-      this.stage?.size({ width: w, height: h });
-      this.groundShadow?.setAttrs({ x: w / 2, y: h * 0.86, radiusX: w * 0.34, radiusY: h * 0.07 });
-      this.render();
-    });
-    this.resizeObserver.observe(container);
-  }
-
-  // ------------------------------------------------------------------
-  // Render: modelo -> vista -> proyección -> pantalla
-  // ------------------------------------------------------------------
-  private render(): void {
-    if (!this.stage) return;
-    const width = this.stage.width();
-    const height = this.stage.height();
-
-    const eye = vec3.fromValues(
-      this.target[0] + this.radius * Math.cos(this.phi) * Math.sin(this.theta),
-      this.target[1] - this.radius * Math.cos(this.phi) * Math.cos(this.theta),
-      this.target[2] + this.radius * Math.sin(this.phi),
-    );
-
-    const view = mat4.lookAt(mat4.create(), eye, this.target, this.up);
-    const proj = mat4.perspective(mat4.create(), (32 * Math.PI) / 180, width / height, 1, 30);
-    const vp = mat4.multiply(mat4.create(), proj, view);
-
-    const project = (p: vec3) => {
-      const out = vec3.create();
-      vec3.transformMat4(out, p, vp);
-      return { x: (out[0] * 0.5 + 0.5) * width, y: (1 - (out[1] * 0.5 + 0.5)) * height };
-    };
-
-    let topVisible = false;
-    for (const f of this.faces) {
-      const toEye = vec3.normalize(vec3.create(), vec3.subtract(vec3.create(), eye, f.centroid));
-      const visible = vec3.dot(f.normal, toEye) > 0.02;
-      f.node!.visible(visible);
-      if (!visible) continue;
-      if (f.isTop) topVisible = true;
-
-      const pts: number[] = [];
-      for (const p of f.points) {
-        const s = project(p);
-        pts.push(s.x, s.y);
+        // Logo del Pelícano en círculo
+        ctx.beginPath();
+        ctx.arc(dist + 8, -tamFuente * 0.28, tamFuente * 0.42, 0, Math.PI * 2);
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+        ctx.restore();
       }
-      f.node!.points(pts);
-      f.node!.fill(this.shadeColor(f.color, f.shade));
+
+      // 3. TEXTO "BR 40"
+      const pBRIni = proyectarUV(-48, 18);
+      const pBRFin = proyectarUV(-18, 18);
+      const dxBR = pBRFin[0] - pBRIni[0];
+      const dyBR = pBRFin[1] - pBRIni[1];
+      const distBR = Math.hypot(dxBR, dyBR);
+      const anguloBR = Math.atan2(dyBR, dxBR);
+
+      if (distBR > 10) {
+        ctx.save();
+        ctx.translate(pBRIni[0], pBRIni[1]);
+        ctx.rotate(anguloBR);
+        const tamBR = Math.max(7, Math.min(18, distBR * 0.32));
+        ctx.font = `bold ${tamBR}px sans-serif`;
+        ctx.fillText('BR 40', 0, 0);
+        ctx.restore();
+      }
+    } else if (cara.tipoCara === 'superior_azul') {
+      // 4. ÍCONO DE PLUMA ESTILOGRÁFICA (Lado azul derecho)
+      const pPen1 = proyectarUV(44, -14);
+      const pPen2 = proyectarUV(70, -14);
+      const pPen3 = proyectarUV(70, 14);
+      const pPen4 = proyectarUV(44, 14);
+
+      ctx.beginPath();
+      ctx.moveTo(pPen1[0], pPen1[1]);
+      ctx.lineTo(pPen2[0], pPen2[1]);
+      ctx.lineTo(pPen3[0], pPen3[1]);
+      ctx.lineTo(pPen4[0], pPen4[1]);
+      ctx.closePath();
+      ctx.stroke();
+
+      // Plumilla interior
+      const pNibTip = proyectarUV(57, 10);
+      const pNibL = proyectarUV(49, -8);
+      const pNibR = proyectarUV(65, -8);
+      ctx.beginPath();
+      ctx.moveTo(pNibTip[0], pNibTip[1]);
+      ctx.lineTo(pNibL[0], pNibL[1]);
+      ctx.lineTo(pNibR[0], pNibR[1]);
+      ctx.closePath();
+      ctx.fill();
     }
 
-    // transformación RÍGIDA (sin shear) para el texto: sigue posición/rotación/escala, no se deforma
-    const sLeft = project(this.topEdgeLeft);
-    const sRight = project(this.topEdgeRight);
-    const sCenter = project(this.topCenter);
-    this.textTransform = {
-      x: sCenter.x,
-      y: sCenter.y,
-      angle: Math.atan2(sRight.y - sLeft.y, sRight.x - sLeft.x),
-      scale: Math.hypot(sRight.x - sLeft.x, sRight.y - sLeft.y) / (2 * this.flatHalf),
-    };
-    this.textShape?.visible(topVisible);
-
-    this.layer?.batchDraw();
-  }
-
-  private drawTopArtwork(ctx: CanvasRenderingContext2D): void {
-    const half = this.flatHalf;
-
-    ctx.fillStyle = '#241413';
-    ctx.textBaseline = 'middle';
-    ctx.font = 'italic 700 0.62px Georgia, serif';
-    ctx.save();
-    ctx.translate(-half * 0.32, -0.28);
-    ctx.rotate(-0.03);
-    ctx.fillText('Pelikan', 0, 0);
     ctx.restore();
-
-    ctx.font = '700 0.5px Arial, sans-serif';
-    ctx.save();
-    ctx.translate(-half * 0.05, 0.32);
-    ctx.rotate(-0.02);
-    ctx.fillText('B R  4 0', 0, 0);
-    ctx.restore();
-
-    const icon = (cx: number, color: string) => {
-      ctx.save();
-      ctx.translate(cx, 0);
-      ctx.rotate(-0.12);
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 0.045;
-      ctx.beginPath();
-      ctx.rect(-0.26, -0.22, 0.52, 0.44);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(-0.14, 0.16);
-      ctx.lineTo(-0.14, -0.1);
-      ctx.lineTo(0.14, -0.1);
-      ctx.lineTo(0.14, 0.16);
-      ctx.stroke();
-      ctx.restore();
-    };
-    icon(-half * 0.78, '#241413');
-    icon(this.split + 0.42, '#0d2748');
-  }
-
-  private shadeColor(hex: string, factor: number): string {
-    const n = parseInt(hex.replace('#', ''), 16);
-    const r = Math.min(255, Math.round(((n >> 16) & 255) * factor));
-    const g = Math.min(255, Math.round(((n >> 8) & 255) * factor));
-    const b = Math.min(255, Math.round((n & 255) * factor));
-    return `rgb(${r}, ${g}, ${b})`;
   }
 }

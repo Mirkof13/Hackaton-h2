@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, signal } from '@angular/core';
 import { Figura } from './figura/figura';
 
 @Component({
@@ -8,4 +8,5 @@ import { Figura } from './figura/figura';
   templateUrl: './app.html',
 })
 export class App {
+  protected readonly title = signal('Hackathon: transformaciones con matrices');
 }
